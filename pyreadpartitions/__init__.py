@@ -1,7 +1,31 @@
 #!/usr/bin/env python
-# vim: set et si sw=2 sts=2 ts=2 tw=0:
+# coding: utf-8
+# vim:et:sta:sts=2:sw=2:ts=2:tw=0:
+"""
+Read MBR (msdos) and GPT partitions for a disk on UNIX.
+Does not rely on any os tools or library.
 
-from __future__ import division, print_function, unicode_literals
+Exemple:
+  import pyreadpartitions as pyrp
+  fp = open('/dev/sda', 'rb')
+  info = pyrp.get_disk_partitions_info(fp)
+  print(info.mbr)
+  print(info.gpt)
+  pyrp.show_disk_partitions_info(info)
+  fp.close()
+  with open('/dev/sda', 'rb') as fp:
+    pyrp.show_disk_partitions_info(fp)
+
+"""
+from __future__ import print_function, unicode_literals, division, absolute_import
+
+__copyright__ = 'Copyright 2013-2014, Salix OS'
+__author__ = 'Cyrille Pontvieux <jrd@salixos.org>'
+__credits__ = ['Cyrille Pontvieux']
+__email__ = 'jrd@salixos.org'
+__license__ = 'MIT'
+__version__ = '1.0.0'
+
 from collections import namedtuple
 import struct
 import sys
@@ -10,7 +34,7 @@ from fcntl import ioctl
 
 # http://en.wikipedia.org/wiki/Master_boot_record#Sector_layout
 MBR_FORMAT = [
-  (b'446x', '_'), # boot code
+  (b'446x', '_'),  # boot code
   (b'16s', 'partition1'),
   (b'16s', 'partition2'),
   (b'16s', 'partition3'),
@@ -19,10 +43,10 @@ MBR_FORMAT = [
 ]
 # http://en.wikipedia.org/wiki/Master_boot_record#Partition_table_entries
 MBR_PARTITION_FORMAT = [
-  (b'B', 'status'), # > 0x80 => active
-  (b'3p', 'chs_first'), # 8*h + 2*c + 6*s + 8*c
+  (b'B', 'status'),  # > 0x80 => active
+  (b'3p', 'chs_first'),  # 8*h + 2*c + 6*s + 8*c
   (b'B', 'type'),
-  (b'3p', 'chs_last'), # 8*h + 2*c + 6*s + 8*c
+  (b'3p', 'chs_last'),  # 8*h + 2*c + 6*s + 8*c
   (b'L', 'lba'),
   (b'L', 'sectors'),
 ]
@@ -88,8 +112,8 @@ MBR_EXTENDED_TYPE = [0x05, 0x0F, 0x15, 0x1F, 0x85]
 # http://en.wikipedia.org/wiki/Extended_boot_record#Structures
 EBR_FORMAT = [
   (b'446x', '_'),
-  (b'16s', 'partition'), # lba = offset from ebr, sectors = size of partition
-  (b'16s', 'next_ebr'), # lba = offset from extended partition, sectors = next EBR + next Partition size
+  (b'16s', 'partition'),  # lba = offset from ebr, sectors = size of partition
+  (b'16s', 'next_ebr'),  # lba = offset from extended partition, sectors = next EBR + next Partition size
   (b'16x', '_'),
   (b'16x', '_'),
   (b'2s', 'signature'),
@@ -198,45 +222,64 @@ GPT_GUID = {
   '89C57F98-2FE5-4DC0-89C1-5EC00CEFF2BE': 'Ceph dm-crypt disk in creation',
 }
 
-def make_fmt(name, fmt, extras = []):
+
+def make_fmt(name, fmt, extras=[]):
   packfmt = b'<' + b''.join(t for t, n in fmt)
   tupletype = namedtuple(name, [n for t, n in fmt if n != '_'] + extras)
   return (packfmt, tupletype)
 
+
 class MBRError(Exception):
   pass
+
+
 class MBRMissing(MBRError):
   pass
+
+
 class GPTError(Exception):
   pass
+
+
 class GPTMissing(GPTError):
   pass
+
 
 def read_mbr_header(fp):
   fmt, MBRHeader = make_fmt('MBRHeader', MBR_FORMAT)
   data = fp.read(struct.calcsize(fmt))
   header = MBRHeader._make(struct.unpack(fmt, data))
   if header.signature != b'\x55\xAA':
-    raise MBRMissing('Bad MBR signature: {0:X}'.format(header.signature))
+    try:
+      sign_hexa = '{0:X}'.format(header.signature)
+    except ValueError:
+      sign_hexa = str(header.signature)
+    raise MBRMissing('Bad MBR signature: {0}'.format(sign_hexa))
   return header
+
 
 def read_mbr_partitions(fp, header):
   def read_mbr_partition(partstr, num):
-    fmt, MBRPartition = make_fmt('MBRPartition', MBR_PARTITION_FORMAT, extras = ['index', 'active', 'type_str'])
+    fmt, MBRPartition = make_fmt('MBRPartition', MBR_PARTITION_FORMAT, extras=['index', 'active', 'type_str'])
     part = MBRPartition._make(struct.unpack(fmt, partstr) + (num, False, ''))
     if part.type:
       ptype = 'Unknown'
       if part.type in MBR_PARTITION_TYPE:
         ptype = MBR_PARTITION_TYPE[part.type]
-      part = part._replace(active = part.status >= 0x80, type_str = ptype)
+      part = part._replace(active=part.status >= 0x80, type_str=ptype)
       return part
+
   def read_ebr_partition(fp, extended_lba, lba, num):
-    fp.seek((extended_lba + lba) * 512) # lba size is fixed to 512 for MBR
+    fp.seek((extended_lba + lba) * 512)  # lba size is fixed to 512 for MBR
     fmt, EBR = make_fmt('EBR', EBR_FORMAT)
     data = fp.read(struct.calcsize(fmt))
     ebr = EBR._make(struct.unpack(fmt, data))
     if ebr.signature != b'\x55\xAA':
-      raise MBRError('Bad EBR signature: {0:X}'.format(ebr.signature))
+      try:
+        sign_hexa = '{0:X}'.format(ebr.signature)
+      except ValueError:
+        sign_hexa = str(header.signature)
+      raise MBRError('Bad EBR signature: {0}'.format(sign_hexa))
     parts = [read_mbr_partition(ebr.partition, num)]
     if ebr.next_ebr != 16 * b'\x00':
       part_next_ebr = read_mbr_partition(ebr.next_ebr, 0)
@@ -257,7 +300,8 @@ def read_mbr_partitions(fp, header):
     parts.extend(read_ebr_partition(fp, extendpart.lba, 0, 5))
   return parts
 
-def read_gpt_header(fp, lba_size = 512):
+
+def read_gpt_header(fp, lba_size=512):
   try:
     # skip MBR (if any)
     fp.seek(1 * lba_size)
@@ -274,13 +318,14 @@ def read_gpt_header(fp, lba_size = 512):
   if header.header_size < 92:
     raise GPTError('Bad GPT header size: {0}'.format(header.header_size))
   header = header._replace(
-    disk_guid = unicode(uuid.UUID(bytes_le = header.disk_guid)).upper(),
+    disk_guid=unicode(uuid.UUID(bytes_le=header.disk_guid)).upper(),
   )
   return header
 
-def read_gpt_partitions(fp, header, lba_size = 512):
+
+def read_gpt_partitions(fp, header, lba_size=512):
   fp.seek(header.part_entry_start_lba * lba_size)
-  fmt, GPTPartition = make_fmt('GPTPartition', GPT_PARTITION_FORMAT, extras = ['index', 'type'])
+  fmt, GPTPartition = make_fmt('GPTPartition', GPT_PARTITION_FORMAT, extras=['index', 'type'])
   parts = []
   for i in xrange(header.num_part_entries):
     data = fp.read(header.part_entry_size)
@@ -289,66 +334,125 @@ def read_gpt_partitions(fp, header, lba_size = 512):
     part = GPTPartition._make(struct.unpack(fmt, data) + (i + 1, ''))
     if part.guid == 16 * b'\x00':
       continue
-    guid = unicode(uuid.UUID(bytes_le = part.guid)).upper()
+    guid = unicode(uuid.UUID(bytes_le=part.guid)).upper()
     ptype = 'Unknown'
     if guid in GPT_GUID:
       ptype = GPT_GUID[guid]
     part = part._replace(
-      guid = guid,
-      uid = unicode(uuid.UUID(bytes_le = part.uid)).upper(),
+      guid=guid,
+      uid=unicode(uuid.UUID(bytes_le=part.uid)).upper(),
       # cut on C-style string termination; otherwise you'll see a long row of NILs for most names
-      name = part.name.decode('utf-16').split(b'\0', 1)[0],
-      type = ptype,
+      name=part.name.decode('utf-16').split(b'\0', 1)[0],
+      type=ptype,
     )
     parts.append(part)
   return parts
+
+
+class DiskException(Exception):
+  pass
+
+
+def check_disk_file(disk):
+  try:
+    disk.tell()
+  except:
+    raise DiskException('Please provide a file pointer (sys.stding or result of open function) as first argument, pointing to an existing disk such as /dev/sda.')
+
+
+def get_mbr_info(disk):
+  check_disk_file(disk)
+  disk.seek(0)
+  try:
+    mbrheader = read_mbr_header(disk)
+    partitions = read_mbr_partitions(disk, mbrheader)
+    return namedtuple('MBRInfo', 'lba_size, partitions')(512, partitions)
+  except MBRMissing:
+    return None
+  except MBRError:
+    return None
+
+
+def get_gpt_info(disk):
+  check_disk_file(disk)
+  disk.seek(0)
+  info = {
+    'lba_size': None,
+    'revision_minor': None,
+    'revision_major': None,
+    'crc32': None,
+    'current_lba': None,
+    'backup_lba': None,
+    'first_usable_lba': None,
+    'last_usable_lba': None,
+    'disk_guid': None,
+    'part_entry_start_lba': None,
+    'num_part_entries': None,
+    'part_entry_size': None,
+    'crc32_part_array': None,
+    'partitions': [],
+  }
+  try:
+    blocksize = struct.unpack('i', ioctl(disk.fileno(), 4608 | 104, struct.pack('i', -1)))[0]
+  except:
+    blocksize = 512
+  try:
+    info['lba_size'] = blocksize
+    gptheader = read_gpt_header(disk, lba_size=blocksize)
+    for key in [k for k in info.keys() if k not in ('lba_size', 'partitions')]:
+      info[key] = getattr(gptheader, key)
+    info['partitions'] = read_gpt_partitions(disk, gptheader, lba_size=blocksize)
+    return namedtuple('GPTInfo', info.keys())(**info)
+  except GPTMissing:
+    return None
+  except GPTError:
+    return None
+
+
+def get_disk_partitions_info(disk):
+  check_disk_file(disk)
+  return namedtuple('DiskInfo', 'mbr, gpt')(get_mbr_info(disk), get_gpt_info(disk))
+
+
+def show_disk_partitions_info(diskOrInfo):
+  if 'read' in diskOrInfo:
+    info = get_disk_partitions_info(diskOrInfo)
+  else:
+    info = diskOrInfo
+  if info['mbr']:
+    mbr = info.mbr
+    print('MBR Header')
+    print('LBA size (sector size): {0}', mbr.lba_size)
+    print('Number of MBR partitions: {0}'.format(len(mbr.partitions)))
+    print('#  Active From(#s)   Size(#s)   Code Type')
+    for part in mbr.partitions:
+      print('{n: <2} {boot: ^6} {from_s: <10} {size_s: <10} {code: ^4X} {type}'.format(n=part.index, boot='*' if part.active else '_', from_s=part.lba, size_s=part.sectors, code=part.type, type=part.type_str))
+  else:
+    print('No MBR')
+  print('---')
+  if info['gpt']:
+    gpt = info.gpt
+    print('GPT Header')
+    print('Disk GUID: {0}'.format(gpt.disk_guid))
+    print('LBA size (sector size): {0}'.format(gpt.lba_size))
+    print('GPT First LBA: {0}'.format(gpt.current_lba))
+    print('GPT Last  LBA: {0}'.format(gpt.backup_lba))
+    print('Number of GPT partitions: {0}'.format(len(gpt.partitions)))
+    print('#   Flags From(#s)   To(#s)     GUID/UID                             Type/Name')
+    for part in gpt.partitions:
+      print(('{n: <3} {flags: ^5} {from_s: <10} {to_s: <10} {guid} {type}\n' + ' ' * 32 + '{uid} {name}').format(n=part.index, flags=part.flags, from_s=part.first_lba, to_s=part.last_lba, guid=part.guid, type=part.type, uid=part.uid, name=part.name))
+  else:
+    print('No GPT')
+  print('---')
+
 
 if __name__ == '__main__':
   fp = sys.stdin
   if len(sys.argv) > 1:
     fp = open(sys.argv[1])
-  else:
-    try:
-      fp.tell()
-    except:
-      print('Please provide a device as first argument or on stdin', file = sys.stderr)
-      sys.exit(1)
   try:
-    mbrheader = read_mbr_header(fp)
-    print('MBR Header')
-    print('LBA size (sector size): 512')
-    mbr_parts = read_mbr_partitions(fp, mbrheader)
-    print('Number of MBR partitions: {0}'.format(len(mbr_parts)))
-    print('#  Active From(#s)   Size(#s)   Code Type')
-    for part in mbr_parts:
-      print('{n: <2} {boot: ^6} {from_s: <10} {size_s: <10} {code: ^4X} {type}'.format(n = part.index, boot = '*' if part.active else '_', from_s = part.lba, size_s = part.sectors, code = part.type, type = part.type_str))
-  except MBRMissing:
-    print('No MBR')
-  except MBRError as e:
-    print('No MBR')
-    print(e, file = sys.stderr)
-  print('---')
-  try:
-    blocksize = struct.unpack('i', ioctl(fp.fileno(), 4608 | 104, struct.pack('i', -1)))[0]
-  except:
-    blocksize = 512
-  try:
-    gptheader = read_gpt_header(fp, lba_size = blocksize)
-    print('GPT Header')
-    print('Disk GUID: {0}'.format(gptheader.disk_guid))
-    print('LBA size (sector size): {0}'.format(blocksize))
-    print('GPT First LBA: {0}'.format(gptheader.current_lba))
-    print('GPT Last  LBA: {0}'.format(gptheader.backup_lba))
-    gpt_parts = read_gpt_partitions(fp, gptheader, lba_size = blocksize)
-    print('Number of GPT partitions: {0}'.format(len(gpt_parts)))
-    print('#   Flags From(#s)   To(#s)     GUID/UID                             Type/Name')
-    for part in gpt_parts:
-      print(('{n: <3} {flags: ^5} {from_s: <10} {to_s: <10} {guid} {type}\n' + ' ' * 32 + '{uid} {name}').format(n = part.index, flags = part.flags, from_s = part.first_lba, to_s = part.last_lba, guid = part.guid, type = part.type, uid = part.uid, name = part.name))
-  except GPTMissing as e:
-    print('No GPT')
-  except GPTError as e:
-    print('No GPT')
-    print(e, file = sys.stderr)
-  print('---')
+    show_disk_partitions_info(fp)
+  except DiskException as e:
+    print(e, file=sys.stderr)
   if fp != sys.stdin:
     fp.close()
