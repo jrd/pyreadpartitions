@@ -250,17 +250,7 @@ def read_mbr_header(fp):
   data = fp.read(struct.calcsize(fmt))
   header = MBRHeader._make(struct.unpack(fmt, data))
   if header.signature != b'\x55\xAA':
-    try:
-      sign_hexa = '{0:X}'.format(header.signature)
-    except ValueError:
-      try:
-        sign_hexa = str(header.signature)
-      except:
-        sign_hexa = None
-    if sign_hexa is not None:
-      raise MBRMissing('Bad MBR signature: {0}'.format(sign_hexa))
-    else:
-      raise MBRMissing('Bad MBR signature')
+    raise MBRMissing('Bad MBR signature')
   return header
 
 
@@ -281,11 +271,7 @@ def read_mbr_partitions(fp, header):
     data = fp.read(struct.calcsize(fmt))
     ebr = EBR._make(struct.unpack(fmt, data))
     if ebr.signature != b'\x55\xAA':
-      try:
-        sign_hexa = '{0:X}'.format(ebr.signature)
-      except ValueError:
-        sign_hexa = str(header.signature)
-      raise MBRError('Bad EBR signature: {0}'.format(sign_hexa))
+      raise MBRError('Bad EBR signature')
     parts = [read_mbr_partition(ebr.partition, num)]
     if ebr.next_ebr != 16 * b'\x00':
       part_next_ebr = read_mbr_partition(ebr.next_ebr, 0)
@@ -317,17 +303,7 @@ def read_gpt_header(fp, lba_size=512):
   data = fp.read(struct.calcsize(fmt))
   header = GPTHeader._make(struct.unpack(fmt, data))
   if header.signature != b'EFI PART':
-    try:
-      sign_hexa = '{0:X}'.format(header.signature)
-    except ValueError:
-      try:
-        sign_hexa = str(header.signature)
-      except:
-        sign_hexa = None
-    if sign_hexa is not None:
-      raise GPTMissing('Bad GPT signature: {0}'.format(sign_hexa))
-    else:
-      raise GPTMissing('Bad GPT signature')
+    raise GPTMissing('Bad GPT signature')
   revision = header.revision_major + (header.revision_minor / 10)
   if revision < 1.0:
     raise GPTError('Bad GPT revision: {0}.{1}'.format(header.revision_major, header.revision_minor))
