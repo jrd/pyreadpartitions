@@ -415,7 +415,10 @@ def get_disk_partitions_info(disk):
 
 
 def show_disk_partitions_info(diskOrInfo):
-  if 'read' in diskOrInfo:
+  fileUsed = None
+  if isinstance(diskOrInfo, str):
+    fileUsed = diskOrInfo = open(diskOrInfo, 'rb')
+  if hasattr(diskOrInfo, 'read'):
     info = get_disk_partitions_info(diskOrInfo)
   else:
     info = diskOrInfo
@@ -444,6 +447,8 @@ def show_disk_partitions_info(diskOrInfo):
   else:
     print('No GPT')
   print('---')
+  if fileUsed:
+    fileUsed.close()
 
 
 if __name__ == '__main__':
