@@ -253,8 +253,14 @@ def read_mbr_header(fp):
     try:
       sign_hexa = '{0:X}'.format(header.signature)
     except ValueError:
-      sign_hexa = str(header.signature)
-    raise MBRMissing('Bad MBR signature: {0}'.format(sign_hexa))
+      try:
+        sign_hexa = str(header.signature)
+      except:
+        sign_hexa = None
+    if sign_hexa is not None:
+      raise MBRMissing('Bad MBR signature: {0}'.format(sign_hexa))
+    else:
+      raise MBRMissing('Bad MBR signature')
   return header
 
 
@@ -310,8 +316,18 @@ def read_gpt_header(fp, lba_size=512):
   fmt, GPTHeader = make_fmt('GPTHeader', GPT_HEADER_FORMAT)
   data = fp.read(struct.calcsize(fmt))
   header = GPTHeader._make(struct.unpack(fmt, data))
-  if header.signature != 'EFI PART':
-    raise GPTMissing('Bad GPT signature: {0}'.format(header.signature))
+  if header.signature != b'EFI PART':
+    try:
+      sign_hexa = '{0:X}'.format(header.signature)
+    except ValueError:
+      try:
+        sign_hexa = str(header.signature)
+      except:
+        sign_hexa = None
+    if sign_hexa is not None:
+      raise GPTMissing('Bad GPT signature: {0}'.format(sign_hexa))
+    else:
+      raise GPTMissing('Bad GPT signature')
   revision = header.revision_major + (header.revision_minor / 10)
   if revision < 1.0:
     raise GPTError('Bad GPT revision: {0}.{1}'.format(header.revision_major, header.revision_minor))
@@ -422,7 +438,6 @@ def show_disk_partitions_info(diskOrInfo):
     info = get_disk_partitions_info(diskOrInfo)
   else:
     info = diskOrInfo
-  print(info)
   if info.mbr:
     mbr = info.mbr
     print('MBR Header')
