@@ -422,7 +422,8 @@ def show_disk_partitions_info(diskOrInfo):
     info = get_disk_partitions_info(diskOrInfo)
   else:
     info = diskOrInfo
-  if info['mbr']:
+  print(info)
+  if info.mbr:
     mbr = info.mbr
     print('MBR Header')
     print('LBA size (sector size): {0}', mbr.lba_size)
@@ -433,7 +434,7 @@ def show_disk_partitions_info(diskOrInfo):
   else:
     print('No MBR')
   print('---')
-  if info['gpt']:
+  if info.gpt:
     gpt = info.gpt
     print('GPT Header')
     print('Disk GUID: {0}'.format(gpt.disk_guid))
