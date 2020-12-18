@@ -18,7 +18,7 @@ Examples:
 """
 __copyright__ = 'Copyright 2013-2021, Cyrille Pontvieux'
 __author__ = 'Cyrille Pontvieux <cyrille@enialis.net>'
-__version__ = '1.1.0'
+__version__ = '1.1.1'
 
 
 from collections import namedtuple

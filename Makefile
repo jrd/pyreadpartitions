@@ -27,10 +27,10 @@ bump_version: venv
 	fi; \
 	VER_MODULE="$$(sed -rn '/^version =/{s/.* attr: (.*)/\1/p}' setup.cfg | rev | cut -d. -f2- | rev)"; \
 	VER_VAR="$$(sed -rn '/^version =/{s/.* attr: (.*)/\1/p}' setup.cfg | rev | cut -d. -f1 | rev)"; \
-	NEW_VER="$$(python -c 'from src.'$${VER_MODULE}' import '$${VER_VAR}'; from semver import parse_version_info; print(parse_version_info(__version__).bump_$(what)())')"; \
-	OLD_VER="$$(sed -rn "/^$${VER_VAR} =/s/.*'(.*)'/\1/p" src/$${VER_MODULE}/__init__.py)"; \
+	NEW_VER="$$(python -c 'from src.'$${VER_MODULE}' import '$${VER_VAR}' as ver; from semver import parse_version_info; print(parse_version_info(ver).bump_$(what)())')"; \
+	OLD_VER="$$(python -c 'from src.'$${VER_MODULE}' import '$${VER_VAR}' as ver; print(ver)')"; \
 	echo "$${OLD_VER} → $${NEW_VER}"; \
-	sed -ri "/^$${VER_VAR} =/s/'.*'/'$${NEW_VER}'/" src/$${VER_MODULE}/__init__.py
+	sed -ri "/^$${VER_VAR} =/{s/'.*'/'$${NEW_VER}'/}" src/$${VER_MODULE}/__init__.py
 
 build: clean venv
 	python setup.py sdist bdist_wheel
