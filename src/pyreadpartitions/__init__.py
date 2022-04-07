@@ -41,9 +41,9 @@ MBR_FORMAT = [
 # http://en.wikipedia.org/wiki/Master_boot_record#Partition_table_entries
 MBR_PARTITION_FORMAT = [
     (b'B', 'status'),  # > 0x80 => active
-    (b'3p', 'chs_first'),  # 8*h + 2*c + 6*s + 8*c
+    (b'3s', 'chs_first'),  # 8*h + 2*c + 6*s + 8*c
     (b'B', 'type'),
-    (b'3p', 'chs_last'),  # 8*h + 2*c + 6*s + 8*c
+    (b'3s', 'chs_last'),  # 8*h + 2*c + 6*s + 8*c
     (b'L', 'lba'),
     (b'L', 'sectors'),
 ]
@@ -218,9 +218,9 @@ GPT_GUID = {
 }
 
 
-def make_fmt(name, fmt, extras=[]):
+def make_fmt(name, fmt, extras=None):
     packfmt = b'<' + b''.join(t for t, n in fmt)
-    tupletype = namedtuple(name, [n for t, n in fmt if n != '_'] + extras)
+    tupletype = namedtuple(name, [n for t, n in fmt if n != '_'] + (extras or []))
     return (packfmt, tupletype)
 
 
@@ -268,6 +268,10 @@ def read_mbr_partitions(fp, header):
         if ebr.signature != b'\x55\xAA':
             raise MBRError('Bad EBR signature')
         parts = [read_mbr_partition(ebr.partition, num)]
+
+        # LBA of EBRs are relative offsets from to the start of EBR to the partition. Calculate the absolute LBA.
+        parts[0] = parts[0]._replace(lba=extended_lba + parts[0].lba)
+
         if ebr.next_ebr != 16 * b'\x00':
             part_next_ebr = read_mbr_partition(ebr.next_ebr, 0)
             next_lba = part_next_ebr.lba
@@ -465,3 +469,4 @@ def main():
 
 if __name__ == '__main__':
     exit(main())
+
